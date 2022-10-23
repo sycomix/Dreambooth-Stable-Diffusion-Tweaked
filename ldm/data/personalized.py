@@ -7,9 +7,8 @@ from torchvision import transforms
 
 import random
 
-training_templates_smallest = [
-    'photo of a sks {}',
-]
+training_templates_smallest = 'photo of a {} {}'
+
 
 reg_templates_smallest = [
     'photo of a {}',
@@ -142,6 +141,7 @@ class PersonalizedBase(Dataset):
                  flip_p=0.5,
                  set="train",
                  placeholder_token="dog",
+                 identifier=None,
                  per_image_tokens=False,
                  center_crop=False,
                  mixing_prob=0.25,
@@ -158,6 +158,7 @@ class PersonalizedBase(Dataset):
         self._length = self.num_images 
 
         self.placeholder_token = placeholder_token
+        self.identifier = identifier
 
         self.per_image_tokens = per_image_tokens
         self.center_crop = center_crop
@@ -195,7 +196,7 @@ class PersonalizedBase(Dataset):
             placeholder_string = f"{self.coarse_class_text} {placeholder_string}"
 
         if not self.reg:
-            text = random.choice(training_templates_smallest).format(placeholder_string)
+            text = training_templates_smallest.format(self.identifier, placeholder_string)
         else:
             text = random.choice(reg_templates_smallest).format(placeholder_string)
             

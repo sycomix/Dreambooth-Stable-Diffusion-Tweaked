@@ -166,14 +166,14 @@ def get_parser(**parser_kwargs):
         default="", 
         help="Initialize embedding manager from a checkpoint")
 
+    parser.add_argument("--identifier", 
+        type=str, 
+        help="The unique word for your custom subject")
+
     parser.add_argument("--class_word", 
         type=str, 
         default="dog",
         help="Placeholder token which will be used to denote the concept in future prompts")
-
-    parser.add_argument("--init_word", 
-        type=str, 
-        help="Word to use as source for initial token embedding")
 
     return parser
 
@@ -623,6 +623,7 @@ if __name__ == "__main__":
 
         # model
 
+        # TODO: Pass in --identifier
         # config.model.params.personalization_config.params.init_word = opt.init_word
         # config.model.params.personalization_config.params.embedding_manager_ckpt = opt.embedding_manager_ckpt
         # config.model.params.personalization_config.params.placeholder_tokens = opt.placeholder_tokens
