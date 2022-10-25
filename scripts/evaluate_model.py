@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     prompt = opt.prompt
 
-    data_loader = PersonalizedBase(opt.data_dir, opt.identifier, size=256, flip_p=0.0)
+    data_loader = PersonalizedBase(opt.data_dir, size=256, flip_p=0.0, identifier=opt.identifier)
 
     images = [torch.from_numpy(data_loader[i]["image"]).permute(2, 0, 1) for i in range(data_loader.num_images)]
     images = torch.stack(images, axis=0)
