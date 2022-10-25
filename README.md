@@ -2,17 +2,17 @@
 
 If you just installed conda:
 
-% conda init bash
+`% conda init bash`
 
 Create the conda environment:
 
-% conda env create -f environment.yaml
+`% conda env create -f environment.yaml`
 
 Activate:
 
-% conda activate ldm
+`% conda activate ldm`
 
-1. Move your model.ckpt into the models directory.
+1. Move your `model.ckpt` into the models directory.
 1. Put your training data into `inputs/training`.
 1. Put your regularization data into `inputs/regularization`.
 
@@ -34,7 +34,7 @@ Prune the checkpoints:
 
 `% python scripts/prune.py --input path/to/model.ckpt`
 
-Turn the ckpt file into the diffusers file format:
+Turn the `ckpt` file into the diffusers file format:
 
 ```
 % python .scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path /path/to/model.ckpt \
