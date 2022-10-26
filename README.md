@@ -1,5 +1,16 @@
 # DreamBooth on Stable Diffusion (with some customizations)
 
+This is a fork of the [DreamBooth repo](https://github.com/XavierXiao/Dreambooth-Stable-Diffusion) with a few small changes (and more coming):
+
+- Fixed a couple of runtime errors I was getting.
+- Enabled passing the identifier (the unique prompt word for your subject) in as an argument so you don't have to modify Python code.
+- Added utilities for pruning the `ckpt` file and for turning a `ckpt` file into the [Hugging Face diffusers](https://huggingface.co/docs/diffusers/index) file format.
+- Tweaked the conda env slightly to accommodate the utility scripts.
+- Assumed some defaults in the suggested command below to make setup easier (things like the location of the `model.ckpt` file, training images, and regularization images).
+- Rewrote the documentation to hopefully make it more widely accessible.
+
+Some people report being able to get this to run on a 3090. I haven't been able to. I've been renting A100s from [vast.ai](https://vast.ai/) (no affiliation), and I'm able to do a full fine-tune in about 15 minutes. If you use Vast, be sure to bump up your disk space way past the default 10GB. That's not nearly enough. I use 100GB so I never have to think about it.
+
 If you just installed conda (or you're running on a fresh VM):
 
 `% conda init bash`
