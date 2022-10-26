@@ -198,8 +198,6 @@ class PersonalizedBase(Dataset):
 
         if not self.reg:
             text = training_templates_smallest.format(identifier_string, placeholder_string)
-            print(text)
-            exit()
         else:
             text = random.choice(reg_templates_smallest).format(placeholder_string)
             
