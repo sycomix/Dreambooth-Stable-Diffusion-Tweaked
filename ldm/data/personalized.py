@@ -192,11 +192,14 @@ class PersonalizedBase(Dataset):
             image = image.convert("RGB")
 
         placeholder_string = self.placeholder_token
+        identifier_string = self.identifier
         if self.coarse_class_text:
             placeholder_string = f"{self.coarse_class_text} {placeholder_string}"
 
         if not self.reg:
-            text = training_templates_smallest.format(self.identifier, placeholder_string)
+            text = training_templates_smallest.format(identifier_string, placeholder_string)
+            print(text)
+            exit()
         else:
             text = random.choice(reg_templates_smallest).format(placeholder_string)
             

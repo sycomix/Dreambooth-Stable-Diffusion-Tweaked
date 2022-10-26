@@ -623,7 +623,6 @@ if __name__ == "__main__":
 
         # model
 
-        # TODO: Pass in --identifier
         # config.model.params.personalization_config.params.init_word = opt.init_word
         # config.model.params.personalization_config.params.embedding_manager_ckpt = opt.embedding_manager_ckpt
         # config.model.params.personalization_config.params.placeholder_tokens = opt.placeholder_tokens
@@ -634,6 +633,10 @@ if __name__ == "__main__":
         config.data.params.train.params.placeholder_token = opt.class_word
         config.data.params.reg.params.placeholder_token = opt.class_word
         config.data.params.validation.params.placeholder_token = opt.class_word
+
+        config.data.params.train.params.identifier = opt.identifier
+        config.data.params.reg.params.identifier = opt.identifier
+        config.data.params.validation.params.identifier = opt.identifier
 
         if opt.actual_resume:
             model = load_model_from_config(config, opt.actual_resume)
