@@ -1,4 +1,4 @@
-name: dream
+name: dream-booth
 channels:
   - pytorch
   - defaults
