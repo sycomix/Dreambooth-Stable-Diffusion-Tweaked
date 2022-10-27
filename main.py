@@ -75,14 +75,14 @@ def get_parser(**parser_kwargs):
         metavar="base_config.yaml",
         help="paths to base configs. Loaded from left-to-right. "
              "Parameters can be overwritten or added with command-line options of the form `--key value`.",
-        default=list(),
+        default=['configs/stable-diffusion/v1-finetune_unfrozen.yaml'],
     )
     parser.add_argument(
         "-t",
         "--train",
         type=str2bool,
         const=True,
-        default=False,
+        default=True,
         nargs="?",
         help="train",
     )
@@ -146,7 +146,7 @@ def get_parser(**parser_kwargs):
         default=True, 
         help="Prepend the final directory in the data_root to the output directory name")
 
-    parser.add_argument("--actual_resume", 
+    parser.add_argument("--ckpt", 
         type=str,
         required=True,
         help="Path to model to actually resume from")
@@ -638,8 +638,8 @@ if __name__ == "__main__":
         config.data.params.reg.params.identifier = opt.identifier
         config.data.params.validation.params.identifier = opt.identifier
 
-        if opt.actual_resume:
-            model = load_model_from_config(config, opt.actual_resume)
+        if opt.ckpt:
+            model = load_model_from_config(config, opt.ckpt)
         else:
             model = instantiate_from_config(config.model)
 
