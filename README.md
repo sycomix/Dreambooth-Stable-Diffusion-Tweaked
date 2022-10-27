@@ -57,7 +57,9 @@ Next, copy and paste the command below, but make the appropriate changes to `--i
 - `--identifier`: The unique word that you want to use to reference your subject in your prompts. It should be something unlikely to already be in the training data.
 - `--class_word`: The class of what you're training on. For example: man, woman, person, dog, etc.
 
-`python main.py --ckpt models/model.ckpt --name DreamBoothFineTune --gpus 0, --data_root inputs/training --reg_data_root inputs/regularization --identifier UNIQUE_IDENTIFIER --class_word SUBJECT_CLASS`
+```
+python main.py --ckpt models/model.ckpt --name DreamBoothFineTune --gpus 0, --data_root inputs/training --reg_data_root inputs/regularization --identifier UNIQUE_IDENTIFIER --class_word SUBJECT_CLASS
+```
 
 (Optional) When you're done, you can prune the checkpoints to create a smaller `ckpt` file ([credit](https://github.com/huggingface/diffusers/blob/main/scripts/convert_original_stable_diffusion_to_diffusers.py)):
 
@@ -65,8 +67,12 @@ Next, copy and paste the command below, but make the appropriate changes to `--i
 
 (Optional) If you did the training on a remote machine, you can copy the ckpt file to your local machine with a command that looks something like this (replace the port number, IP address, and paths):
 
-`% scp -P PORT_NUM root@123.456.789.000:/root/Dreambooth-Stable-Diffusion-Tweaked/logs/training2022-10-25T21-25-03_DreamBoothFineTune/checkpoints/last.ckpt .`
+```
+% scp -P PORT_NUM root@123.456.789.000:/root/Dreambooth-Stable-Diffusion-Tweaked/logs/training2022-10-25T21-25-03_DreamBoothFineTune/checkpoints/last.ckpt .
+```
 
 (Optional) Turn the `ckpt` file into the diffusers file format ([credit](https://github.com/harubaru/waifu-diffusion/blob/main/scripts/prune.py)) compatible with the [Stable Diffusion Photoshop REST API Server](https://github.com/cantrell/stable-diffusion-api-server):
 
-`% python .scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path /path/to/model.ckpt --dump_path /output/path`
+```
+% python .scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path /path/to/model.ckpt --dump_path /output/path
+```
