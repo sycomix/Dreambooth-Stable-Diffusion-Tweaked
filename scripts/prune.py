@@ -1,14 +1,15 @@
 import os
-from pathlib import Path
 import torch
 import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('--input', '-I', type=str, help='Input file to prune', required = True)
+import glob
+
+
+parser = argparse.ArgumentParser(description='Pruning')
+parser.add_argument('--ckpt', type=str, default=None, help='path to model ckpt')
 args = parser.parse_args()
-file = args.input
+ckpt = args.ckpt
 
-
-def prune_it(p, keep_only_ema=True):
+def prune_it(p, keep_only_ema=False):
     print(f"prunin' in path: {p}")
     size_initial = os.path.getsize(p)
     nsd = dict()
@@ -24,15 +25,14 @@ def prune_it(p, keep_only_ema=True):
     if keep_only_ema:
         sd = nsd["state_dict"].copy()
         # infer ema keys
-        ema_keys = {k: "model_ema." + k[6:].replace(".", "") for k in sd.keys() if k.startswith('model.')}
+        ema_keys = {k: "model_ema." + k[6:].replace(".", ".") for k in sd.keys() if k.startswith("model.")}
         new_sd = dict()
 
         for k in sd:
             if k in ema_keys:
-                print(k, ema_keys[k])
-                new_sd[k] = sd[ema_keys[k]]
+                new_sd[k] = sd[ema_keys[k]].half()
             elif not k.startswith("model_ema.") or k in ["model_ema.num_updates", "model_ema.decay"]:
-                new_sd[k] = sd[k]
+                new_sd[k] = sd[k].half()
 
         assert len(new_sd) == len(sd) - len(ema_keys)
         nsd["state_dict"] = new_sd
@@ -40,7 +40,7 @@ def prune_it(p, keep_only_ema=True):
         sd = nsd['state_dict'].copy()
         new_sd = dict()
         for k in sd:
-            new_sd[k] = sd[k]
+            new_sd[k] = sd[k].half()
         nsd['state_dict'] = new_sd
 
     fn = f"{os.path.splitext(p)[0]}-pruned.ckpt" if not keep_only_ema else f"{os.path.splitext(p)[0]}-ema-pruned.ckpt"
@@ -55,4 +55,4 @@ def prune_it(p, keep_only_ema=True):
 
 
 if __name__ == "__main__":
-    prune_it(file)
+    prune_it(ckpt)
