@@ -74,5 +74,5 @@ python main.py --ckpt models/model.ckpt --name DreamBoothFineTune --gpus 0, --da
 (Optional) Turn the `ckpt` file into the diffusers file format ([credit](https://github.com/harubaru/waifu-diffusion/blob/main/scripts/prune.py)) compatible with the [Stable Diffusion Photoshop REST API Server](https://github.com/cantrell/stable-diffusion-api-server):
 
 ```
-% python .scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path /path/to/model.ckpt --dump_path /output/path
+% python scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path /path/to/model.ckpt --dump_path /output/path
 ```
