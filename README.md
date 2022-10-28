@@ -61,9 +61,9 @@ Next, copy and paste the command below, but make the appropriate changes to `--i
 python main.py --ckpt models/model.ckpt --name DreamBoothFineTune --gpus 0, --data_root inputs/training --reg_data_root inputs/regularization --identifier UNIQUE_IDENTIFIER --class_word SUBJECT_CLASS
 ```
 
-(Optional) When you're done, you can prune the checkpoints to create a smaller `ckpt` file ([credit](https://github.com/huggingface/diffusers/blob/main/scripts/convert_original_stable_diffusion_to_diffusers.py)):
+(Optional) When you're done, you can prune the checkpoints to create a smaller `ckpt` file ([credit](https://github.com/prettydeep/Dreambooth-SD-ckpt-pruning/blob/main/prune-ckpt.py)):
 
-`% python scripts/prune.py --input path/to/model.ckpt`
+`% python scripts/prune.py --ckpt path/to/model.ckpt`
 
 (Optional) If you did the training on a remote machine, you can copy the ckpt file to your local machine with a command that looks something like this (replace the port number, IP address, and paths):
 
