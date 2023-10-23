@@ -122,11 +122,7 @@ if __name__ == "__main__":
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
 
-    if opt.plms:
-        sampler = PLMSSampler(model)
-    else:
-        sampler = DDIMSampler(model)
-
+    sampler = PLMSSampler(model) if opt.plms else DDIMSampler(model)
     os.makedirs(opt.outdir, exist_ok=True)
     outpath = opt.outdir
 
@@ -137,13 +133,13 @@ if __name__ == "__main__":
     os.makedirs(sample_path, exist_ok=True)
     base_count = len(os.listdir(sample_path))
 
-    all_samples=list()
+    all_samples = []
     with torch.no_grad():
         with model.ema_scope():
             uc = None
             if opt.scale != 1.0:
                 uc = model.get_learned_conditioning(opt.n_samples * [""])
-            for n in trange(opt.n_iter, desc="Sampling"):
+            for _ in trange(opt.n_iter, desc="Sampling"):
                 c = model.get_learned_conditioning(opt.n_samples * [prompt])
                 shape = [4, opt.H//8, opt.W//8]
                 samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
@@ -168,17 +164,17 @@ if __name__ == "__main__":
     # additionally, save as grid
     grid = torch.stack(all_samples, 0)
     grid = rearrange(grid, 'n b c h w -> (n b) c h w')
-    
+
     for i in range(grid.size(0)):
-           save_image(grid[i, :, :, :], os.path.join(outpath,opt.prompt+'_{}.png'.format(i)))
-           
+        save_image(grid[i, :, :, :], os.path.join(outpath, f'{opt.prompt}_{i}.png'))
+
     grid = make_grid(grid, nrow=opt.n_samples)
-    
+
 
     # to image
     grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
     Image.fromarray(grid.astype(np.uint8)).save(os.path.join(outpath, f'{prompt.replace(" ", "-")}.jpg'))
-    
-    
+
+
 
     print(f"Your samples are ready and waiting four you here: \n{outpath} \nEnjoy.")

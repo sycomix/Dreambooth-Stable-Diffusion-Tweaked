@@ -140,9 +140,7 @@ class EmbeddingManager(nn.Module):
 
     def get_embedding_norms_squared(self):
         all_params = torch.cat(list(self.string_to_param_dict.values()), axis=0) # num_placeholders x embedding_dim
-        param_norm_squared = (all_params * all_params).sum(axis=-1)              # num_placeholders
-
-        return param_norm_squared
+        return (all_params * all_params).sum(axis=-1)
 
     def embedding_parameters(self):
         return self.string_to_param_dict.parameters()

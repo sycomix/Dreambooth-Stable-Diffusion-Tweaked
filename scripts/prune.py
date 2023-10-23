@@ -22,12 +22,12 @@ def prune_it(p, keep_only_ema=False):
         print(f"removing optimizer states for path {p}")
     if "global_step" in sd:
         print(f"This is global step {sd['global_step']}.")
+    new_sd = dict()
+
     if keep_only_ema:
         sd = nsd["state_dict"].copy()
         # infer ema keys
         ema_keys = {k: "model_ema." + k[6:].replace(".", ".") for k in sd.keys() if k.startswith("model.")}
-        new_sd = dict()
-
         for k in sd:
             if k in ema_keys:
                 new_sd[k] = sd[ema_keys[k]].half()
@@ -38,7 +38,6 @@ def prune_it(p, keep_only_ema=False):
         nsd["state_dict"] = new_sd
     else:
         sd = nsd['state_dict'].copy()
-        new_sd = dict()
         for k in sd:
             new_sd[k] = sd[k].half()
         nsd['state_dict'] = new_sd

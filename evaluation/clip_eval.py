@@ -71,12 +71,12 @@ class LDMCLIPEvaluator(CLIPEvaluator):
         n_batches         = n_samples // samples_per_batch
 
         # generate samples
-        all_samples=list()
+        all_samples = []
         with torch.no_grad():
-            with ldm_model.ema_scope():                
+            with ldm_model.ema_scope():        
                 uc = ldm_model.get_learned_conditioning(samples_per_batch * [""])
 
-                for batch in range(n_batches):
+                for _ in range(n_batches):
                     c = ldm_model.get_learned_conditioning(samples_per_batch * [target_text])
                     shape = [4, 256//8, 256//8]
                     samples_ddim, _ = sampler.sample(S=n_steps,
@@ -92,7 +92,7 @@ class LDMCLIPEvaluator(CLIPEvaluator):
                     x_samples_ddim = torch.clamp(x_samples_ddim, min=-1.0, max=1.0)
 
                     all_samples.append(x_samples_ddim)
-        
+
         all_samples = torch.cat(all_samples, axis=0)
 
         sim_samples_to_img  = self.img_to_img_similarity(src_images, all_samples)

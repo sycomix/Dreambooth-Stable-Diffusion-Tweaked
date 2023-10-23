@@ -185,10 +185,9 @@ class PersonalizedBase(Dataset):
         return self._length
 
     def __getitem__(self, i):
-        example = {}
         image = Image.open(self.image_paths[i % self.num_images])
 
-        if not image.mode == "RGB":
+        if image.mode != "RGB":
             image = image.convert("RGB")
 
         placeholder_string = self.placeholder_token
@@ -200,12 +199,11 @@ class PersonalizedBase(Dataset):
             text = training_templates_smallest.format(identifier_string, placeholder_string)
         else:
             text = random.choice(reg_templates_smallest).format(placeholder_string)
-            
-        example["caption"] = text
 
+        example = {"caption": text}
         # default to score-sde preprocessing
         img = np.array(image).astype(np.uint8)
-        
+
         if self.center_crop:
             crop = min(img.shape[0], img.shape[1])
             h, w, = img.shape[0], img.shape[1]

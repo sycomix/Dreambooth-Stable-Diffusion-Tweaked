@@ -200,7 +200,7 @@ class DDPM(pl.LightningModule):
         for k in keys:
             for ik in ignore_keys:
                 if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
+                    print(f"Deleting key {k} from state_dict.")
                     del sd[k]
         missing, unexpected = self.load_state_dict(sd, strict=False) if not only_model else self.model.load_state_dict(
             sd, strict=False)
@@ -269,9 +269,7 @@ class DDPM(pl.LightningModule):
                                 clip_denoised=self.clip_denoised)
             if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
                 intermediates.append(img)
-        if return_intermediates:
-            return img, intermediates
-        return img
+        return (img, intermediates) if return_intermediates else img
 
     @torch.no_grad()
     def sample(self, batch_size=16, return_intermediates=False):
@@ -305,7 +303,6 @@ class DDPM(pl.LightningModule):
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_out = self.model(x_noisy, t)
 
-        loss_dict = {}
         if self.parameterization == "eps":
             target = noise
         elif self.parameterization == "x0":
@@ -317,15 +314,15 @@ class DDPM(pl.LightningModule):
 
         log_prefix = 'train' if self.training else 'val'
 
-        loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+        loss_dict = {f'{log_prefix}/loss_simple': loss.mean()}
         loss_simple = loss.mean() * self.l_simple_weight
 
         loss_vlb = (self.lvlb_weights[t] * loss).mean()
-        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+        loss_dict[f'{log_prefix}/loss_vlb'] = loss_vlb
 
         loss = loss_simple + self.original_elbo_weight * loss_vlb
 
-        loss_dict.update({f'{log_prefix}/loss': loss})
+        loss_dict[f'{log_prefix}/loss'] = loss
 
         return loss, loss_dict
 
@@ -368,7 +365,7 @@ class DDPM(pl.LightningModule):
         _, loss_dict_no_ema = self.shared_step(batch)
         with self.ema_scope():
             _, loss_dict_ema = self.shared_step(batch)
-            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+            loss_dict_ema = {f'{key}_ema': loss_dict_ema[key] for key in loss_dict_ema}
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
@@ -393,7 +390,7 @@ class DDPM(pl.LightningModule):
         log["inputs"] = x
 
         # get diffusion row
-        diffusion_row = list()
+        diffusion_row = []
         x_start = x[:n_row]
 
         for t in range(self.num_timesteps):
@@ -425,9 +422,8 @@ class DDPM(pl.LightningModule):
         lr = self.learning_rate
         params = list(self.model.parameters())
         if self.learn_logvar:
-            params = params + [self.logvar]
-        opt = torch.optim.AdamW(params, lr=lr)
-        return opt
+            params += [self.logvar]
+        return torch.optim.AdamW(params, lr=lr)
 
 
 class LatentDiffusion(DDPM):
@@ -539,25 +535,25 @@ class LatentDiffusion(DDPM):
             param.requires_grad = False
 
     def instantiate_cond_stage(self, config):
-        if not self.cond_stage_trainable:
-            if config == "__is_first_stage__":
-                print("Using first stage also as cond stage.")
-                self.cond_stage_model = self.first_stage_model
-            elif config == "__is_unconditional__":
-                print(f"Training {self.__class__.__name__} as an unconditional model.")
-                self.cond_stage_model = None
-                # self.be_unconditional = True
-            else:
-                model = instantiate_from_config(config)
-                self.cond_stage_model = model.eval()
-                self.cond_stage_model.train = disabled_train
-                for param in self.cond_stage_model.parameters():
-                    param.requires_grad = False
-        else:
+        if self.cond_stage_trainable:
             assert config != '__is_first_stage__'
             assert config != '__is_unconditional__'
             model = instantiate_from_config(config)
             self.cond_stage_model = model
+
+        elif config == "__is_first_stage__":
+            print("Using first stage also as cond stage.")
+            self.cond_stage_model = self.first_stage_model
+        elif config == "__is_unconditional__":
+            print(f"Training {self.__class__.__name__} as an unconditional model.")
+            self.cond_stage_model = None
+            # self.be_unconditional = True
+        else:
+            model = instantiate_from_config(config)
+            self.cond_stage_model = model.eval()
+            self.cond_stage_model.train = disabled_train
+            for param in self.cond_stage_model.parameters():
+                param.requires_grad = False
             
     
     # def instantiate_embedding_manager(self, config, embedder):
@@ -569,10 +565,13 @@ class LatentDiffusion(DDPM):
     #     return model
 
     def _get_denoise_row_from_list(self, samples, desc='', force_no_decoder_quantization=False):
-        denoise_row = []
-        for zd in tqdm(samples, desc=desc):
-            denoise_row.append(self.decode_first_stage(zd.to(self.device),
-                                                            force_not_quantize=force_no_decoder_quantization))
+        denoise_row = [
+            self.decode_first_stage(
+                zd.to(self.device),
+                force_not_quantize=force_no_decoder_quantization,
+            )
+            for zd in tqdm(samples, desc=desc)
+        ]
         n_imgs_per_row = len(denoise_row)
         denoise_row = torch.stack(denoise_row)  # n_log_step, n_row, C, H, W
         denoise_grid = rearrange(denoise_row, 'n b c h w -> b n c h w')
@@ -606,8 +605,7 @@ class LatentDiffusion(DDPM):
         y = torch.arange(0, h).view(h, 1, 1).repeat(1, w, 1)
         x = torch.arange(0, w).view(1, w, 1).repeat(h, 1, 1)
 
-        arr = torch.cat([y, x], dim=-1)
-        return arr
+        return torch.cat([y, x], dim=-1)
 
     def delta_border(self, h, w):
         """
@@ -620,8 +618,7 @@ class LatentDiffusion(DDPM):
         arr = self.meshgrid(h, w) / lower_right_corner
         dist_left_up = torch.min(arr, dim=-1, keepdims=True)[0]
         dist_right_down = torch.min(1 - arr, dim=-1, keepdims=True)[0]
-        edge_dist = torch.min(torch.cat([dist_left_up, dist_right_down], dim=-1), dim=-1)[0]
-        return edge_dist
+        return torch.min(torch.cat([dist_left_up, dist_right_down], dim=-1), dim=-1)[0]
 
     def get_weighting(self, h, w, Ly, Lx, device):
         weighting = self.delta_border(h, w)
@@ -704,17 +701,16 @@ class LatentDiffusion(DDPM):
         if self.model.conditioning_key is not None:
             if cond_key is None:
                 cond_key = self.cond_stage_key
-            if cond_key != self.first_stage_key:
-                if cond_key in ['caption', 'coordinates_bbox']:
-                    xc = batch[cond_key]
-                elif cond_key == 'class_label':
-                    xc = batch
-                else:
-                    xc = super().get_input(batch, cond_key).to(self.device)
-            else:
+            if cond_key == self.first_stage_key:
                 xc = x
+            elif cond_key in ['caption', 'coordinates_bbox']:
+                xc = batch[cond_key]
+            elif cond_key == 'class_label':
+                xc = batch
+            else:
+                xc = super().get_input(batch, cond_key).to(self.device)
             if not self.cond_stage_trainable or force_c_encode:
-                if isinstance(xc, dict) or isinstance(xc, list):
+                if isinstance(xc, (dict, list)):
                     # import pudb; pudb.set_trace()
                     c = self.get_learned_conditioning(xc)
                 else:
@@ -753,55 +749,58 @@ class LatentDiffusion(DDPM):
 
         z = 1. / self.scale_factor * z
 
-        if hasattr(self, "split_input_params"):
-            if self.split_input_params["patch_distributed_vq"]:
-                ks = self.split_input_params["ks"]  # eg. (128, 128)
-                stride = self.split_input_params["stride"]  # eg. (64, 64)
-                uf = self.split_input_params["vqf"]
-                bs, nc, h, w = z.shape
-                if ks[0] > h or ks[1] > w:
-                    ks = (min(ks[0], h), min(ks[1], w))
-                    print("reducing Kernel")
-
-                if stride[0] > h or stride[1] > w:
-                    stride = (min(stride[0], h), min(stride[1], w))
-                    print("reducing stride")
-
-                fold, unfold, normalization, weighting = self.get_fold_unfold(z, ks, stride, uf=uf)
-
-                z = unfold(z)  # (bn, nc * prod(**ks), L)
-                # 1. Reshape to img shape
-                z = z.view((z.shape[0], -1, ks[0], ks[1], z.shape[-1]))  # (bn, nc, ks[0], ks[1], L )
-
-                # 2. apply model loop over last dim
-                if isinstance(self.first_stage_model, VQModelInterface):
-                    output_list = [self.first_stage_model.decode(z[:, :, :, :, i],
-                                                                 force_not_quantize=predict_cids or force_not_quantize)
-                                   for i in range(z.shape[-1])]
-                else:
-
-                    output_list = [self.first_stage_model.decode(z[:, :, :, :, i])
-                                   for i in range(z.shape[-1])]
-
-                o = torch.stack(output_list, axis=-1)  # # (bn, nc, ks[0], ks[1], L)
-                o = o * weighting
-                # Reverse 1. reshape to img shape
-                o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
-                # stitch crops together
-                decoded = fold(o)
-                decoded = decoded / normalization  # norm is shape (1, 1, h, w)
-                return decoded
-            else:
-                if isinstance(self.first_stage_model, VQModelInterface):
-                    return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize)
-                else:
-                    return self.first_stage_model.decode(z)
+        if (
+            hasattr(self, "split_input_params")
+            and not self.split_input_params["patch_distributed_vq"]
+            and isinstance(self.first_stage_model, VQModelInterface)
+            or not hasattr(self, "split_input_params")
+            and isinstance(self.first_stage_model, VQModelInterface)
+        ):
+            return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize)
+        elif (
+            hasattr(self, "split_input_params")
+            and not self.split_input_params["patch_distributed_vq"]
+            or not hasattr(self, "split_input_params")
+        ):
+            return self.first_stage_model.decode(z)
 
         else:
+            ks = self.split_input_params["ks"]  # eg. (128, 128)
+            stride = self.split_input_params["stride"]  # eg. (64, 64)
+            uf = self.split_input_params["vqf"]
+            bs, nc, h, w = z.shape
+            if ks[0] > h or ks[1] > w:
+                ks = (min(ks[0], h), min(ks[1], w))
+                print("reducing Kernel")
+
+            if stride[0] > h or stride[1] > w:
+                stride = (min(stride[0], h), min(stride[1], w))
+                print("reducing stride")
+
+            fold, unfold, normalization, weighting = self.get_fold_unfold(z, ks, stride, uf=uf)
+
+            z = unfold(z)  # (bn, nc * prod(**ks), L)
+            # 1. Reshape to img shape
+            z = z.view((z.shape[0], -1, ks[0], ks[1], z.shape[-1]))  # (bn, nc, ks[0], ks[1], L )
+
+            # 2. apply model loop over last dim
             if isinstance(self.first_stage_model, VQModelInterface):
-                return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize)
+                output_list = [self.first_stage_model.decode(z[:, :, :, :, i],
+                                                             force_not_quantize=predict_cids or force_not_quantize)
+                               for i in range(z.shape[-1])]
             else:
-                return self.first_stage_model.decode(z)
+
+                output_list = [self.first_stage_model.decode(z[:, :, :, :, i])
+                               for i in range(z.shape[-1])]
+
+            o = torch.stack(output_list, axis=-1)  # # (bn, nc, ks[0], ks[1], L)
+            o = o * weighting
+            # Reverse 1. reshape to img shape
+            o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
+            # stitch crops together
+            decoded = fold(o)
+            decoded = decoded / normalization  # norm is shape (1, 1, h, w)
+            return decoded
 
     # same as above but without decorator
     def differentiable_decode_first_stage(self, z, predict_cids=False, force_not_quantize=False):
@@ -813,100 +812,100 @@ class LatentDiffusion(DDPM):
 
         z = 1. / self.scale_factor * z
 
-        if hasattr(self, "split_input_params"):
-            if self.split_input_params["patch_distributed_vq"]:
-                ks = self.split_input_params["ks"]  # eg. (128, 128)
-                stride = self.split_input_params["stride"]  # eg. (64, 64)
-                uf = self.split_input_params["vqf"]
-                bs, nc, h, w = z.shape
-                if ks[0] > h or ks[1] > w:
-                    ks = (min(ks[0], h), min(ks[1], w))
-                    print("reducing Kernel")
-
-                if stride[0] > h or stride[1] > w:
-                    stride = (min(stride[0], h), min(stride[1], w))
-                    print("reducing stride")
-
-                fold, unfold, normalization, weighting = self.get_fold_unfold(z, ks, stride, uf=uf)
-
-                z = unfold(z)  # (bn, nc * prod(**ks), L)
-                # 1. Reshape to img shape
-                z = z.view((z.shape[0], -1, ks[0], ks[1], z.shape[-1]))  # (bn, nc, ks[0], ks[1], L )
-
-                # 2. apply model loop over last dim
-                if isinstance(self.first_stage_model, VQModelInterface):  
-                    output_list = [self.first_stage_model.decode(z[:, :, :, :, i],
-                                                                 force_not_quantize=predict_cids or force_not_quantize)
-                                   for i in range(z.shape[-1])]
-                else:
-
-                    output_list = [self.first_stage_model.decode(z[:, :, :, :, i])
-                                   for i in range(z.shape[-1])]
-
-                o = torch.stack(output_list, axis=-1)  # # (bn, nc, ks[0], ks[1], L)
-                o = o * weighting
-                # Reverse 1. reshape to img shape
-                o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
-                # stitch crops together
-                decoded = fold(o)
-                decoded = decoded / normalization  # norm is shape (1, 1, h, w)
-                return decoded
-            else:
-                if isinstance(self.first_stage_model, VQModelInterface):
-                    return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize)
-                else:
-                    return self.first_stage_model.decode(z)
+        if (
+            hasattr(self, "split_input_params")
+            and not self.split_input_params["patch_distributed_vq"]
+            and isinstance(self.first_stage_model, VQModelInterface)
+            or not hasattr(self, "split_input_params")
+            and isinstance(self.first_stage_model, VQModelInterface)
+        ):
+            return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize)
+        elif (
+            hasattr(self, "split_input_params")
+            and not self.split_input_params["patch_distributed_vq"]
+            or not hasattr(self, "split_input_params")
+        ):
+            return self.first_stage_model.decode(z)
 
         else:
-            if isinstance(self.first_stage_model, VQModelInterface):
-                return self.first_stage_model.decode(z, force_not_quantize=predict_cids or force_not_quantize)
+            ks = self.split_input_params["ks"]  # eg. (128, 128)
+            stride = self.split_input_params["stride"]  # eg. (64, 64)
+            uf = self.split_input_params["vqf"]
+            bs, nc, h, w = z.shape
+            if ks[0] > h or ks[1] > w:
+                ks = (min(ks[0], h), min(ks[1], w))
+                print("reducing Kernel")
+
+            if stride[0] > h or stride[1] > w:
+                stride = (min(stride[0], h), min(stride[1], w))
+                print("reducing stride")
+
+            fold, unfold, normalization, weighting = self.get_fold_unfold(z, ks, stride, uf=uf)
+
+            z = unfold(z)  # (bn, nc * prod(**ks), L)
+            # 1. Reshape to img shape
+            z = z.view((z.shape[0], -1, ks[0], ks[1], z.shape[-1]))  # (bn, nc, ks[0], ks[1], L )
+
+            # 2. apply model loop over last dim
+            if isinstance(self.first_stage_model, VQModelInterface):  
+                output_list = [self.first_stage_model.decode(z[:, :, :, :, i],
+                                                             force_not_quantize=predict_cids or force_not_quantize)
+                               for i in range(z.shape[-1])]
             else:
-                return self.first_stage_model.decode(z)
+
+                output_list = [self.first_stage_model.decode(z[:, :, :, :, i])
+                               for i in range(z.shape[-1])]
+
+            o = torch.stack(output_list, axis=-1)  # # (bn, nc, ks[0], ks[1], L)
+            o = o * weighting
+            # Reverse 1. reshape to img shape
+            o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
+            # stitch crops together
+            decoded = fold(o)
+            decoded = decoded / normalization  # norm is shape (1, 1, h, w)
+            return decoded
 
     @torch.no_grad()
     def encode_first_stage(self, x):
-        if hasattr(self, "split_input_params"):
-            if self.split_input_params["patch_distributed_vq"]:
-                ks = self.split_input_params["ks"]  # eg. (128, 128)
-                stride = self.split_input_params["stride"]  # eg. (64, 64)
-                df = self.split_input_params["vqf"]
-                self.split_input_params['original_image_size'] = x.shape[-2:]
-                bs, nc, h, w = x.shape
-                if ks[0] > h or ks[1] > w:
-                    ks = (min(ks[0], h), min(ks[1], w))
-                    print("reducing Kernel")
-
-                if stride[0] > h or stride[1] > w:
-                    stride = (min(stride[0], h), min(stride[1], w))
-                    print("reducing stride")
-
-                fold, unfold, normalization, weighting = self.get_fold_unfold(x, ks, stride, df=df)
-                z = unfold(x)  # (bn, nc * prod(**ks), L)
-                # Reshape to img shape
-                z = z.view((z.shape[0], -1, ks[0], ks[1], z.shape[-1]))  # (bn, nc, ks[0], ks[1], L )
-
-                output_list = [self.first_stage_model.encode(z[:, :, :, :, i])
-                               for i in range(z.shape[-1])]
-
-                o = torch.stack(output_list, axis=-1)
-                o = o * weighting
-
-                # Reverse reshape to img shape
-                o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
-                # stitch crops together
-                decoded = fold(o)
-                decoded = decoded / normalization
-                return decoded
-
-            else:
-                return self.first_stage_model.encode(x)
-        else:
+        if (
+            not hasattr(self, "split_input_params")
+            or not self.split_input_params["patch_distributed_vq"]
+        ):
             return self.first_stage_model.encode(x)
+        ks = self.split_input_params["ks"]  # eg. (128, 128)
+        stride = self.split_input_params["stride"]  # eg. (64, 64)
+        df = self.split_input_params["vqf"]
+        self.split_input_params['original_image_size'] = x.shape[-2:]
+        bs, nc, h, w = x.shape
+        if ks[0] > h or ks[1] > w:
+            ks = (min(ks[0], h), min(ks[1], w))
+            print("reducing Kernel")
+
+        if stride[0] > h or stride[1] > w:
+            stride = (min(stride[0], h), min(stride[1], w))
+            print("reducing stride")
+
+        fold, unfold, normalization, weighting = self.get_fold_unfold(x, ks, stride, df=df)
+        z = unfold(x)  # (bn, nc * prod(**ks), L)
+        # Reshape to img shape
+        z = z.view((z.shape[0], -1, ks[0], ks[1], z.shape[-1]))  # (bn, nc, ks[0], ks[1], L )
+
+        output_list = [self.first_stage_model.encode(z[:, :, :, :, i])
+                       for i in range(z.shape[-1])]
+
+        o = torch.stack(output_list, axis=-1)
+        o = o * weighting
+
+        # Reverse reshape to img shape
+        o = o.view((o.shape[0], -1, o.shape[-1]))  # (bn, nc * ks[0] * ks[1], L)
+        # stitch crops together
+        decoded = fold(o)
+        decoded = decoded / normalization
+        return decoded
 
     def shared_step(self, batch, **kwargs):
         x, c = self.get_input(batch, self.first_stage_key)
-        loss = self(x, c)
-        return loss
+        return self(x, c)
     
     def training_step(self, batch, batch_idx):
         train_batch = batch[0]
@@ -953,10 +952,7 @@ class LatentDiffusion(DDPM):
 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
 
-        if isinstance(cond, dict):
-            # hybrid case, cond is exptected to be a dict
-            pass
-        else:
+        if not isinstance(cond, dict):
             if not isinstance(cond, list):
                 cond = [cond]
             key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
@@ -1049,10 +1045,7 @@ class LatentDiffusion(DDPM):
         else:
             x_recon = self.model(x_noisy, t, **cond)
 
-        if isinstance(x_recon, tuple) and not return_ids:
-            return x_recon[0]
-        else:
-            return x_recon
+        return x_recon[0] if isinstance(x_recon, tuple) and not return_ids else x_recon
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         return (extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - pred_xstart) / \
@@ -1077,7 +1070,6 @@ class LatentDiffusion(DDPM):
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         model_output = self.apply_model(x_noisy, t, cond)
 
-        loss_dict = {}
         prefix = 'train' if self.training else 'val'
 
         if self.parameterization == "x0":
@@ -1088,22 +1080,21 @@ class LatentDiffusion(DDPM):
             raise NotImplementedError()
 
         loss_simple = self.get_loss(model_output, target, mean=False).mean([1, 2, 3])
-        loss_dict.update({f'{prefix}/loss_simple': loss_simple.mean()})
-
+        loss_dict = {f'{prefix}/loss_simple': loss_simple.mean()}
         logvar_t = self.logvar[t].to(self.device)
         loss = loss_simple / torch.exp(logvar_t) + logvar_t
         # loss = loss_simple / torch.exp(self.logvar) + self.logvar
         if self.learn_logvar:
-            loss_dict.update({f'{prefix}/loss_gamma': loss.mean()})
-            loss_dict.update({'logvar': self.logvar.data.mean()})
+            loss_dict[f'{prefix}/loss_gamma'] = loss.mean()
+            loss_dict['logvar'] = self.logvar.data.mean()
 
         loss = self.l_simple_weight * loss.mean()
 
         loss_vlb = self.get_loss(model_output, target, mean=False).mean(dim=(1, 2, 3))
         loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
-        loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
+        loss_dict[f'{prefix}/loss_vlb'] = loss_vlb
         loss += (self.original_elbo_weight * loss_vlb)
-        loss_dict.update({f'{prefix}/loss': loss})
+        loss_dict[f'{prefix}/loss'] = loss
 
         # if self.embedding_reg_weight > 0:
         #     loss_embedding_reg = self.embedding_manager.embedding_to_coarse_loss().mean()
@@ -1190,10 +1181,7 @@ class LatentDiffusion(DDPM):
             shape = [batch_size] + list(shape)
         else:
             b = batch_size = shape[0]
-        if x_T is None:
-            img = torch.randn(shape, device=self.device)
-        else:
-            img = x_T
+        img = torch.randn(shape, device=self.device) if x_T is None else x_T
         intermediates = []
         if cond is not None:
             if isinstance(cond, dict):
@@ -1243,11 +1231,7 @@ class LatentDiffusion(DDPM):
             log_every_t = self.log_every_t
         device = self.betas.device
         b = shape[0]
-        if x_T is None:
-            img = torch.randn(shape, device=device)
-        else:
-            img = x_T
-
+        img = torch.randn(shape, device=device) if x_T is None else x_T
         intermediates = [img]
         if timesteps is None:
             timesteps = self.num_timesteps
@@ -1280,9 +1264,7 @@ class LatentDiffusion(DDPM):
             if callback: callback(i)
             if img_callback: img_callback(img, i)
 
-        if return_intermediates:
-            return img, intermediates
-        return img
+        return (img, intermediates) if return_intermediates else img
 
     @torch.no_grad()
     def sample(self, cond, batch_size=16, return_intermediates=False, x_T=None,
@@ -1352,7 +1334,7 @@ class LatentDiffusion(DDPM):
 
         if plot_diffusion_rows:
             # get diffusion row
-            diffusion_row = list()
+            diffusion_row = []
             z_start = z[:n_row]
             for t in range(self.num_timesteps):
                 if t % self.log_every_t == 0 or t == self.num_timesteps - 1:
@@ -1379,7 +1361,7 @@ class LatentDiffusion(DDPM):
             if plot_denoise_rows:
                 denoise_grid = self._get_denoise_row_from_list(z_denoise_row)
                 log["denoise_row"] = denoise_grid
-            
+
             uc = self.get_learned_conditioning(len(c) * [""])
             sample_scaled, _ = self.sample_log(cond=c, 
                                                batch_size=N, 
@@ -1454,7 +1436,7 @@ class LatentDiffusion(DDPM):
             params = list(self.model.parameters())
             if self.cond_stage_trainable:
                 print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
-                params = params + list(self.cond_stage_model.parameters())
+                params += list(self.cond_stage_model.parameters())
             if self.learn_logvar:
                 print('Diffusion model optimizing logvar')
                 params.append(self.logvar)
